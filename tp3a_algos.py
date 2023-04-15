@@ -19,6 +19,7 @@
 import numpy as np
 import math
 import rospy
+import cvxpy as cp
 
 
 
@@ -29,10 +30,65 @@ import rospy
 
 toto = 1.0
 
+# Sampling Time
+Te = 1
+
+# System dynamics
+A = np.eye(2)
+B = np.eye(2) * Te
+
+# MPC parameters
+N = 10  # Prediction horizon
+dt = 0.1  # Time step
+Q = np.eye(2)  # State cost matrix
+R = np.eye(2)  # Control input cost matrix
+
+max_velocity = np.array([0.5, 0.5]) # Maximum velocity
+displacement = np.array([0.5, 0.5]) # Displacement
+
+# Hostage position
+hostage_position = np.array([4, 5])
+
 # ===================================================================================
 
+def MPC(robotNo, nbRobots, poses):
+
+    # Optimization variables
+    x = cp.Variable((2, N+1))
+    u = cp.Variable((2, N))
+
+    # MPC optimization problem
+    cost = 0
+    constraints = []
+
+    if robotNo == 1:
+        for t in range(N):
+            cost += cp.quad_form(x[:, t] - hostage_position, Q) + cp.quad_form(u[:, t], R)
+            constraints += [x[:, t+1] == A @ x[:, t] + B @ u[:, t],
+                            cp.norm(u[:, t], 2) <= cp.norm(max_velocity, 2)]
+
+    else:
+         for t in range(N):
+            cost += cp.quad_form(x[:, t] - poses[:1, 0] + displacement, Q) + cp.quad_form(u[:, t], R)
+            constraints += [x[:, t+1] == A @ x[:, t] + B @ u[:, t],
+                            cp.norm(u[:, t], 2) <= cp.norm(max_velocity, 2)]
+
+    # Initial state constraint
+    constraints += [x[:, 0] == poses[:1, robotNo-1]]
+
+    # Solve optimization problem
+    prob = cp.Problem(cp.Minimize(cost), constraints)
+    prob.solve()
+
+    # Extract optimal control input
+    optimal_u = u[:, 0].value
+    vx = optimal_u[0]
+    vy = optimal_u[1]
 
 
+    return vx, vy
+
+# ============================================    
 
 # =======================================
 def consensus(robotNo, nbRobots, poses):
@@ -57,13 +113,7 @@ def consensus(robotNo, nbRobots, poses):
 
     return vx, vy
 
-# ====================================        
-
-
-
-
-
-# ============================================    
+# ====================================  
 
 def leaderFollower(robotNo, nbRobots, poses):
     K = 0.5  # Gain de suivi
@@ -103,8 +153,9 @@ def controller(robotNo, nbRobots, poses):
 # =======================================
     
     # UNCOMMENT THE ONE TO BE TESTED FOR EXPERIMENT
-    vx,vy = consensus(robotNo, nbRobots, poses)
+    #vx,vy = consensus(robotNo, nbRobots, poses)
     #vx,vy = leaderFollower(robotNo, nbRobots, poses)
+    vx,vy = MPC(robotNo, nbRobots, poses)
     
     return vx,vy
     

@@ -20,7 +20,7 @@ follower_initial_position = np.array([2, 2])
 bot_position = np.array([0, 0])
 
 # Maximum number of iterations and tolerance
-max_iterations = 100
+max_iterations = 30
 tolerance = 0.1
 
 # Store the bot and follower positions for plotting
@@ -58,11 +58,10 @@ for i in range(max_iterations):
     cost_follower = 0
     constraints_follower = []
     for t in range(N):
-        cost_follower += cp.quad_form(x_follower[:, t] - x_leader[:, t], Q) + cp.quad_form(u_follower[:, t], R)
+        cost_follower += cp.quad_form(x_follower[:, t] - bot_position + np.array([0.5, 0.5]), Q) + cp.quad_form(u_follower[:, t], R)
         constraints_follower += [
             x_follower[:, t + 1] == A @ x_follower[:, t] + B @ u_follower[:, t],
             cp.norm(u_follower[:, t], 2) <= cp.norm(max_velocity, 2),
-
         ]
     constraints_follower += [x_follower[:, 0] == follower_initial_position]
 
@@ -75,6 +74,7 @@ for i in range(max_iterations):
     # Extract optimal control inputs
     optimal_u_leader = u_leader[:, 0].value
     optimal_u_follower = u_follower[:, 0].value
+    
 
     # Apply control inputs to the system and update the system states
     next_bot_position = A @ bot_position + B @ optimal_u_leader
